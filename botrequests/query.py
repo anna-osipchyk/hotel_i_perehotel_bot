@@ -1,6 +1,8 @@
 import requests
 import os
 import json
+
+from botrequests.lowprice import get_photos
 from database import Database
 from dotenv import load_dotenv
 
@@ -8,25 +10,11 @@ load_dotenv()
 
 API_KEY = os.getenv('x-rapidapi-key')
 
+
 class Query:
 
-    url = "https://hotels4.p.rapidapi.com/locations/v2/search"
-    headers = {
-        'x-rapidapi-host': "hotels4.p.rapidapi.com",
-        'x-rapidapi-key': API_KEY
-    }
-
-
-class QueryLowprice:
-    URL = "https://hotels4.p.rapidapi.com/locations/search"
-    URL_LOWPRICE = "https://hotels4.p.rapidapi.com/properties/list"
-    URL_GETPHOTOS = "https://hotels4.p.rapidapi.com/properties/get-hotel-photos"
-
+    URL = "https://hotels4.p.rapidapi.com/locations/v2/search"
     HEADERS = {
-        'x-rapidapi-host': "hotels4.p.rapidapi.com",
-        'x-rapidapi-key': API_KEY
-    }
-    HEADERS_LOWPRICE = {
         'x-rapidapi-host': "hotels4.p.rapidapi.com",
         'x-rapidapi-key': API_KEY
     }
@@ -35,10 +23,21 @@ class QueryLowprice:
         'x-rapidapi-key': API_KEY
     }
 
-    def get_photos(number_of_photos, hotel_id):
+
+class QueryLowprice(Query):
+
+    URL_LOWPRICE = "https://hotels4.p.rapidapi.com/properties/list"
+    URL_GETPHOTOS = "https://hotels4.p.rapidapi.com/properties/get-hotel-photos"
+
+    HEADERS_LOWPRICE = {
+        'x-rapidapi-host': "hotels4.p.rapidapi.com",
+        'x-rapidapi-key': API_KEY
+    }
+
+    def get_photos(self,number_of_photos, hotel_id):
         querystring_getphotos = {"id": hotel_id}
 
-        response = requests.request("GET", URL_GETPHOTOS, headers=HEADERS_GETPHOTOS, params=querystring_getphotos)
+        response = requests.request("GET", self.URL_GETPHOTOS, headers=self.HEADERS_GETPHOTOS, params=querystring_getphotos)
         dict_of_response = json.loads(response.text)
         images = dict_of_response["hotelImages"]
         urls = [image["baseUrl"].format(size=image["sizes"][0]["suffix"]) for image in images]
@@ -46,7 +45,7 @@ class QueryLowprice:
             return urls[:number_of_photos]
         return urls
 
-    def lowprice(temp_dict):
+    def lowprice(self, temp_dict):
         Database.insert(temp_dict)
         Database.sql.execute('SELECT city_of_destination, num_of_variants, num_of_photos FROM users')
 
@@ -56,7 +55,7 @@ class QueryLowprice:
         city = tuple_of_data[0]
 
         querystring = {"query": city, "locale": "ru"}
-        response = requests.request("GET", URL, headers=HEADERS, params=querystring)
+        response = requests.request("GET", self.URL, headers=self.HEADERS, params=querystring)
 
         dict_of_response = json.loads(response.text)
         # print(dict_of_response)
@@ -69,7 +68,7 @@ class QueryLowprice:
                                     "checkOut": "2020-01-15", "adults1": "1", "sortOrder": "PRICE", "locale": "ru",
                                     "currency": "BYN"}
 
-            response_lowprice = requests.request("GET", URL_LOWPRICE, headers=HEADERS_LOWPRICE,
+            response_lowprice = requests.request("GET", self.URL_LOWPRICE, headers=self.HEADERS_LOWPRICE,
                                                  params=querystring_lowprice)
             print(response_lowprice.text)
             dict_of_response_lowprice = json.loads(response_lowprice.text)
