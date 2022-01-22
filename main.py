@@ -1,5 +1,8 @@
 import telebot
 import os
+
+from telebot.types import InputMediaPhoto
+
 from botrequests.query import *
 from dotenv import load_dotenv
 
@@ -82,19 +85,21 @@ class DialogHandler:
             self.response = ql.lowprice(user_data)
             print(self.response)
         self.send_response()
+
     def send_response(self):
         for result in self.response:
-            r ={}
             photos = result.pop("Фотографии")
-            if photos is not None:
-                photos_string = "\nФотографии: "
-                photos_string += "\n ".join(photos)
-            else:
-                photos_string = ''
+            print(photos)
             string = "\n".join([key + ": " + value for key, value in result.items()])
-            string += photos_string
-            print(string+photos_string)
             self.bot.send_message(self.id, string)
+            print(string)
+            if photos is not None:
+                print("there are photos to send")
+                photos_tg = [InputMediaPhoto(media=el) for el in photos]
+                photos_string = "\nФотографии: "
+                self.bot.send_media_group(self.id, photos_tg)
+
+
 
 
 class DialogHandlerLowprice(DialogHandler):
