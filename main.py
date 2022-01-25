@@ -1,11 +1,13 @@
 import telebot
 import os
 
+from telebot import types
 from telebot.types import InputMediaPhoto
-
 from botrequests.highprice import QueryHighprice
 from botrequests.lowprice import QueryLowprice
 from dotenv import load_dotenv
+from datetime import date
+from telegram_bot_calendar import DetailedTelegramCalendar as Calendar
 
 load_dotenv()
 
@@ -14,19 +16,154 @@ API_KEY = os.getenv('x-rapidapi-key')
 BOT = telebot.TeleBot(TOKEN)
 
 
-class DialogHandler:
+def check_dates(date1, date2=None):
+    now = date.today()
+    if date2 is not None and (date1 < now or date1 > date2):
+        return False
+    elif date2 is False and (date1 < now):
+        return False
+    return True
+
+
+def choose_command_and_create_instance(id, command, message):
+    dh = None
+    if command == "/lowprice":
+        dh = DialogHandlerLowprice(id, command)
+    elif command == "/highprice":
+        dh = DialogHandlerHighprice(id, command)
+    elif command == "/bestdeal":
+        dh = DialogHandlerBestDeal(id, command)
+    BOT.register_next_step_handler(message, dh.get_city)
+
+
+class CommandMixin:
+    def __init__(self, command):
+        self.command = command
+
+
+class User(CommandMixin):
+    users = {}
+    self_like_id = None
+
+    def __init__(self, id, command):
+        super().__init__(command)
+        self.id = id
+        User.add_user(id, self)
+
+    @classmethod
+    def add_user(cls, id, user):
+        cls.users[id] = user
+
+    @classmethod
+    def get_user(cls, id, command=None):
+        if id in User.users:
+            return User.users[id]
+        return User(id, command)
+
+    @staticmethod
+    def get_dates(id):
+        calendar = Calendar(locale='ru', calendar_id=1).build()[0]
+        User.self_like_id = id
+        BOT.send_message(id,
+                         f"В каком году отправляемся? ",
+                         reply_markup=calendar)
+
+    @staticmethod
+    @BOT.callback_query_handler(func=lambda call: call.data in ['yes_1', 'yes_2', 'no_1', 'no_2'])
+    def call(c):
+        if c.data == "yes_1":
+            calendar, step = Calendar(locale='ru', calendar_id=2).build()
+            BOT.send_message(c.message.chat.id,
+                             f"Здорово! Напиши год, когда ты вернешься: ",
+                             reply_markup=calendar)
+        elif c.data == "no_1":
+            DialogHandler.user_data.pop('arrival')
+            calendar, step = Calendar(locale='ru', calendar_id=1).build()
+            BOT.send_message(c.message.chat.id,
+                             f"Выбери нужный год: ",
+                             reply_markup=calendar)
+
+        elif c.data == "yes_2":
+            BOT.send_message(c.message.chat.id, f"Класс, теперь"
+                                                f" отправь мне название города,"
+                                                f" в котором ты хочешь найти подходящий отель\n✨✨✨\nНапример, Минск")
+            id, command = User.self_like_id, User.users[User.self_like_id].command
+            choose_command_and_create_instance(id, command, c.message)
+        elif c.data == "no_2":
+            DialogHandler.user_data.pop('arrival')
+            calendar, step = Calendar(locale='ru', calendar_id=1).build()
+            BOT.send_message(c.message.chat.id,
+                             f"Выбери нужный год: ",
+                             reply_markup=calendar)
+
+    @staticmethod
+    @BOT.callback_query_handler(func=Calendar.func(calendar_id=1))
+    def call(c):
+        step_dict = {'y': 'год', 'm': 'месяц', 'd': 'день'}
+
+        result, key, step = Calendar(locale='ru', calendar_id=1).process(c.data)
+        if not result and key:
+            BOT.edit_message_text(f"Выбери {step_dict[step]}",
+                                  c.message.chat.id,
+                                  c.message.message_id,
+                                  reply_markup=key)
+        elif result:
+            DialogHandler.user_data['arrival'] = result
+            is_valid = check_dates(DialogHandler.user_data['arrival'], DialogHandler.user_data.get('departure', None))
+            if is_valid:
+                keyboard = types.InlineKeyboardMarkup(row_width=2)
+                yes_btn = types.InlineKeyboardButton(text="да", callback_data="yes_1")
+                no_btn = types.InlineKeyboardButton(text="нет", callback_data="no_1")
+                keyboard.add(yes_btn, no_btn)
+                BOT.send_message(c.message.chat.id, f'Твоя выбранная дата: {result}. Все верно?', reply_markup=keyboard)
+            else:
+                BOT.send_message(c.message.chat.id, f'Неверная дата! Давай попробуем еще раз')
+                calendar, step = Calendar(locale='ru', calendar_id=1).build()
+                BOT.send_message(c.message.chat.id,
+                                 f"Выбери нужный год: ",
+                                 reply_markup=calendar)
+
+    @staticmethod
+    @BOT.callback_query_handler(func=Calendar.func(calendar_id=2))
+    def call(c):
+        step_dict = {'y': 'год', 'm': 'месяц', 'd': 'день'}
+        result, key, step = Calendar(locale='ru', calendar_id=2).process(c.data)
+        if not result and key:
+            BOT.edit_message_text(f"Выбери {step_dict[step]}",
+                                  c.message.chat.id,
+                                  c.message.message_id,
+                                  reply_markup=key)
+        elif result:
+            DialogHandler.user_data['departure'] = result
+            print(DialogHandler.user_data)
+            is_valid = check_dates(DialogHandler.user_data['arrival'], DialogHandler.user_data.get('departure', None))
+            if is_valid:
+                keyboard = types.InlineKeyboardMarkup(row_width=2)
+                yes_btn = types.InlineKeyboardButton(text="да", callback_data="yes_2")
+                no_btn = types.InlineKeyboardButton(text="нет", callback_data="no_2")
+                keyboard.add(yes_btn, no_btn)
+                BOT.send_message(c.message.chat.id, f'Твоя выбранная дата: {result}. Все верно?', reply_markup=keyboard)
+            else:
+                BOT.send_message(c.message.chat.id, f'Неверная дата! Давай попробуем еще раз')
+                calendar, step = Calendar(locale='ru', calendar_id=2).build()
+                BOT.send_message(c.message.chat.id,
+                                 f"Выбери нужный год: ",
+                                 reply_markup=calendar)
+
+
+class DialogHandler(User):
     user_data = {}
     bot = BOT
 
     def __init__(self, id, command):
+        super().__init__(id, command)
         self.response = None
-        self.id = id
-        self.command = command
 
     def get_city(self, message):
         self.user_data['city_of_destination'] = message.text
         self.user_data['id'] = message.from_user.id
-        self.bot.send_message(message.from_user.id, "Круто! Сколько вариантов тебе показать?")
+        self.bot.send_message(self.id,
+                              "Класс! Сколько вариантов тебе нужно?")
         self.bot.register_next_step_handler(message, self.get_number_of_variants)
 
     def get_number_of_variants(self, message):
@@ -81,8 +218,9 @@ class DialogHandler:
             ql = QueryHighprice()
             self.response = ql.highprice(user_data)
         elif self.command == "/bestdeal":
-            ql = QueryBestdeal()
-            self.response = ql.bestdeal(user_data)
+            # ql = QueryBestdeal()
+            # self.response = ql.bestdeal(user_data)
+            pass
         if isinstance(self.response, Exception):
             self.bot.send_message(self.id, 'Извини, я ничего не нашел😣')
             return
@@ -175,6 +313,7 @@ class DialogHandlerBestDeal(DialogHandler):
 
 @BOT.message_handler(commands=["start", "lowprice", "highprice", "bestdeal", "history"])
 def get_text_message(message):
+
     if message.text == '/start':
         BOT.send_message(message.from_user.id, f"Привет, {message.from_user.first_name}!🤗\n\n"
                                                f"Меня зовут {BOT.get_me().first_name},"
@@ -182,22 +321,12 @@ def get_text_message(message):
                                                f"Для навигации по командам отправь мне /help")
 
     elif message.text in ["/lowprice", "/highprice", "/bestdeal"]:
-        BOT.send_message(message.from_user.id, f"Класс, теперь"
-                                               f" отправь мне название города,"
-                                               f" в котором ты хочешь найти подходящий отель\n✨✨✨\nНапример, Минск")
-        if message.text == "/lowprice":
-            dh = DialogHandlerLowprice(message.from_user.id, message.text)
-        elif message.text == "/highprice":
-            dh = DialogHandlerHighprice(message.from_user.id,message.text)
-        elif message.text == "/bestdeal":
-            dh = DialogHandlerBestDeal(message.from_user.id,message.text)
-        BOT.register_next_step_handler(message, dh.get_city)
+
+        user = User.get_user(message.from_user.id, message.text)
+        user.get_dates(user.id)
 
     elif message.text == '/history':
         pass
-        # command = COMMANDS.get(message.text)
-        # answer = BOT.register_next_step_handler(message, get_city)
-        # print(answer)
 
 
 @BOT.message_handler(content_types=["text"])
