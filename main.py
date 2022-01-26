@@ -1,12 +1,17 @@
+import datetime
+
 import telebot
 import os
 
 from telebot import types
 from telebot.types import InputMediaPhoto
+
+from botrequests.bestdeal import QueryBestdeal
 from botrequests.highprice import QueryHighprice
 from botrequests.lowprice import QueryLowprice
 from dotenv import load_dotenv
-from datetime import date
+from datetime import datetime
+import datetime as dt
 from telegram_bot_calendar import DetailedTelegramCalendar as Calendar
 
 load_dotenv()
@@ -17,7 +22,7 @@ BOT = telebot.TeleBot(TOKEN)
 
 
 def check_dates(date1, date2=None):
-    now = date.today()
+    now = dt.date.today()
     if date2 is not None and (date1 < now or date1 > date2):
         return False
     elif date2 is False and (date1 < now):
@@ -25,15 +30,19 @@ def check_dates(date1, date2=None):
     return True
 
 
-def choose_command_and_create_instance(id, command, message):
+def choose_command_and_create_instance(id, command, message, photos_needed=False):
     dh = None
     if command == "/lowprice":
         dh = DialogHandlerLowprice(id, command)
     elif command == "/highprice":
         dh = DialogHandlerHighprice(id, command)
     elif command == "/bestdeal":
+        print("bestdeal is chosen")
         dh = DialogHandlerBestDeal(id, command)
-    BOT.register_next_step_handler(message, dh.get_city)
+    if photos_needed:
+        BOT.register_next_step_handler(message, dh.get_number_of_photos)
+    else:
+        BOT.register_next_step_handler(message, dh.get_city)
 
 
 class CommandMixin:
@@ -69,7 +78,7 @@ class User(CommandMixin):
                          reply_markup=calendar)
 
     @staticmethod
-    @BOT.callback_query_handler(func=lambda call: call.data in ['yes_1', 'yes_2', 'no_1', 'no_2'])
+    @BOT.callback_query_handler(func=lambda call: call.data in ['yes_1', 'yes_2', 'yes_3', 'no_1', 'no_2', 'no_3'])
     def call(c):
         if c.data == "yes_1":
             calendar, step = Calendar(locale='ru', calendar_id=2).build()
@@ -84,17 +93,29 @@ class User(CommandMixin):
                              reply_markup=calendar)
 
         elif c.data == "yes_2":
-            BOT.send_message(c.message.chat.id, f"Класс, теперь"
-                                                f" отправь мне название города,"
-                                                f" в котором ты хочешь найти подходящий отель\n✨✨✨\nНапример, Минск")
-            id, command = User.self_like_id, User.users[User.self_like_id].command
-            choose_command_and_create_instance(id, command, c.message)
+            keyboard = types.InlineKeyboardMarkup(row_width=2)
+            yes_btn = types.InlineKeyboardButton(text="да", callback_data="yes_3")
+            no_btn = types.InlineKeyboardButton(text="нет", callback_data="no_3")
+            keyboard.add(yes_btn, no_btn)
+            BOT.send_message(c.message.chat.id, "Тебе понадобятся фотографии?", reply_markup=keyboard)
+
         elif c.data == "no_2":
             DialogHandler.user_data.pop('arrival')
             calendar, step = Calendar(locale='ru', calendar_id=1).build()
             BOT.send_message(c.message.chat.id,
                              f"Выбери нужный год: ",
                              reply_markup=calendar)
+        elif c.data == "yes_3":
+            BOT.send_message(c.message.chat.id, "Напиши, сколько фотографий тебе показать📸")
+            id, command = User.self_like_id, User.users[User.self_like_id].command
+            choose_command_and_create_instance(id, command, c.message, True)
+
+        elif c.data == "no_3":
+            BOT.send_message(c.message.chat.id, f"Класс, теперь"
+                                                f" отправь мне название города,"
+                                                f" в котором ты хочешь найти подходящий отель\n✨✨✨\nНапример, Минск")
+            id, command = User.self_like_id, User.users[User.self_like_id].command
+            choose_command_and_create_instance(id, command, c.message)
 
     @staticmethod
     @BOT.callback_query_handler(func=Calendar.func(calendar_id=1))
@@ -159,11 +180,25 @@ class DialogHandler(User):
         super().__init__(id, command)
         self.response = None
 
+    def get_number_of_photos(self, message):
+        number_of_photos = message.text
+        try:
+            self.user_data['number_of_photos'] = int(number_of_photos)
+            self.bot.send_message(self.id, f"Класс, теперь"
+                                           f" отправь мне название города,"
+                                           f" в котором ты хочешь найти подходящий отель\n✨✨✨\nНапример, Минск")
+            self.bot.register_next_step_handler(message, self.get_city)
+
+        except ValueError:
+            self.bot.send_message(self.id,
+                                  "Моя твоя не понимать🤯\nДавай попробуем еще раз.\nСколько фотографий показать?")
+            self.bot.register_next_step_handler(message, self.get_number_of_photos)
+
     def get_city(self, message):
         self.user_data['city_of_destination'] = message.text
         self.user_data['id'] = message.from_user.id
         self.bot.send_message(self.id,
-                              "Класс! Сколько вариантов тебе нужно?")
+                              "Сколько вариантов тебе нужно?")
         self.bot.register_next_step_handler(message, self.get_number_of_variants)
 
     def get_number_of_variants(self, message):
@@ -172,37 +207,12 @@ class DialogHandler(User):
             if self.user_data['number_of_variants'] <= 0:
                 raise Exception
             self.bot.send_message(self.id,
-                                  "Замечательно! Уже пробиваю по базам. Нужны ли тебе фотографии? Да/нет")
-            self.bot.register_next_step_handler(message, self.get_photos)
+                                  "Понял! Работаю...")
+            self.get_answer()
 
         except Exception:
             self.bot.send_message(self.id, " Введи корректное число 👉🏻👈🏻\nСколько вариантов тебе показать?")
             self.bot.register_next_step_handler(message, self.get_number_of_variants)
-
-    def get_photos(self, message):
-        are_photos_needed = message.text.lower()
-        if are_photos_needed == 'да':
-            self.bot.send_message(self.id, "Отлично! Сколько фотографий тебе нужно?")
-            self.bot.register_next_step_handler(message, self.get_number_of_photos)
-        elif are_photos_needed == 'нет':
-            self.bot.send_message(self.id, "Окей, работаю!")
-            self.user_data['number_of_photos'] = 0
-            self.get_answer()
-        else:
-            self.bot.send_message(self.id, "Я тебя не понял🥲\nДа или нет?")
-            self.bot.register_next_step_handler(message, self.get_photos)
-
-    def get_number_of_photos(self, message):
-        number_of_photos = message.text
-        try:
-            self.user_data['number_of_photos'] = int(number_of_photos)
-            self.bot.send_message(self.id, "Понял, работаю...")
-            self.get_answer()
-
-        except ValueError:
-            self.bot.send_message(self.id,
-                                  "Моя твоя не понимать🤯\nДавай попробуем еще раз.\nСколько фотографий показать?")
-            self.bot.register_next_step_handler(message, self.get_number_of_photos)
 
     def get_answer(self):
         print('повезло повезло')
@@ -211,16 +221,14 @@ class DialogHandler(User):
 
     def get_query(self, user_data):
         ql = None
+        print(user_data)
         if self.command == "/lowprice":
             ql = QueryLowprice()
-            self.response = ql.lowprice(user_data)
         elif self.command == "/highprice":
             ql = QueryHighprice()
-            self.response = ql.highprice(user_data)
         elif self.command == "/bestdeal":
-            # ql = QueryBestdeal()
-            # self.response = ql.bestdeal(user_data)
-            pass
+            ql = QueryBestdeal()
+        self.response = ql.get_response(user_data)
         if isinstance(self.response, Exception):
             self.bot.send_message(self.id, 'Извини, я ничего не нашел😣')
             return
@@ -258,6 +266,13 @@ class DialogHandlerHighprice(DialogHandler):
 
 
 class DialogHandlerBestDeal(DialogHandler):
+    def get_city(self, message):
+        print("bestdeal")
+        self.user_data['city_of_destination'] = message.text
+        self.user_data['id'] = message.from_user.id
+        self.bot.send_message(self.id,
+                              "Сколько вариантов тебе нужно?")
+        self.bot.register_next_step_handler(message, self.get_number_of_variants)
 
     def get_number_of_variants(self, message):
         try:
@@ -265,7 +280,7 @@ class DialogHandlerBestDeal(DialogHandler):
             if self.user_data['number_of_variants'] <= 0:
                 raise Exception
             self.bot.send_message(self.id,
-                                  "Замечательно! Введи минимальную стоимость")
+                                  "Замечательно! Введи минимальную стоимость ($)")
             self.bot.register_next_step_handler(message, self.get_min_price)
 
         except Exception:
@@ -275,7 +290,7 @@ class DialogHandlerBestDeal(DialogHandler):
     def get_min_price(self, message):
         try:
             self.user_data["min_price"] = float(message.text)
-            self.bot.send_message(self.id, "Супер! Tеперь максимальную")
+            self.bot.send_message(self.id, "Супер! Tеперь максимальную ($)")
             self.bot.register_next_step_handler(message, self.get_max_price)
         except Exception:
             self.bot.send_message(self.id, " Введи корректную цену 👉🏻👈🏻")
@@ -286,7 +301,7 @@ class DialogHandlerBestDeal(DialogHandler):
             self.user_data["max_price"] = float(message.text)
             if self.user_data["max_price"] <= self.user_data["min_price"]:
                 raise Exception
-            self.bot.send_message(self.id, "Супер! Теперь введи предпочтительное расстояние от центра")
+            self.bot.send_message(self.id, "Супер! Теперь введи максимальное предпочтительное расстояние от центра")
             self.bot.register_next_step_handler(message, self.get_miles)
         except Exception:
             self.bot.send_message(self.id, " Введи корректную цену 👉🏻👈🏻")
@@ -298,8 +313,8 @@ class DialogHandlerBestDeal(DialogHandler):
             if self.user_data["miles"] <= 0:
                 raise Exception
             self.bot.send_message(self.id,
-                                  "Замечательно! Уже пробиваю по базам. Нужны ли тебе фотографии? Да/нет")
-            self.bot.register_next_step_handler(message, self.get_photos)
+                                  "Понял! Работаю...")
+            self.get_answer()
         except Exception:
             self.bot.send_message(self.id, " Введи корректные данные🥺")
             self.bot.register_next_step_handler(message, self.get_miles)
@@ -313,7 +328,6 @@ class DialogHandlerBestDeal(DialogHandler):
 
 @BOT.message_handler(commands=["start", "lowprice", "highprice", "bestdeal", "history"])
 def get_text_message(message):
-
     if message.text == '/start':
         BOT.send_message(message.from_user.id, f"Привет, {message.from_user.first_name}!🤗\n\n"
                                                f"Меня зовут {BOT.get_me().first_name},"
