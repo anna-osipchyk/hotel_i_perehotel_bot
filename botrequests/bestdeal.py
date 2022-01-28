@@ -38,13 +38,13 @@ class QueryBestdeal(Query):
         self.min_price, self.max_price = tuple_of_data[6], tuple_of_data[7]
 
     def for_each_variant(self, variant):
-        name, address, price, overall_price, distance, urls = super().for_each_variant(variant)
+        name, address, price, overall_price, distance, urls, url = super().for_each_variant(variant)
         exact_price = int(variant["ratePlan"]["price"]["exactCurrent"])
         miles = int(distance.replace(" miles", ""))
         if miles > self.miles:
             print('its none')
             return None
-        return name, address, price, overall_price, distance, urls
+        return name, address, price, overall_price, distance, urls, url
 
     def get_response(self, user_data):
         self.db_insert(user_data)
@@ -74,7 +74,7 @@ class QueryBestdeal(Query):
                 if count_of_valid_variants == self.number_of_variants or count_of_valid_variants > len(list_of_variants):
                     break
                 try:
-                    name, address, price, overall_price, distance, urls = self.for_each_variant(variant)
+                    name, address, price, overall_price, distance, urls, url = self.for_each_variant(variant)
                     count_of_valid_variants+=1
                     if urls is not None:
                         urls = urls.copy()
@@ -84,7 +84,8 @@ class QueryBestdeal(Query):
                         "Стоимость": price,
                         "Общая стоимость": overall_price,
                         "Расстояние от центра": distance,
-                        "Фотографии": urls
+                        "Фотографии": urls,
+                        "Подробнее": url
                     }
                     print(current_data)
                     photos = current_data.pop("Фотографии")

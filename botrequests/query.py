@@ -87,8 +87,9 @@ class Query:
         distance = variant["landmarks"][0]["distance"]
         # print(list_of_variants[i]["landmarks"])
         print("distance is correct")
-        print(name, address, price, overall_price, distance, urls)
-        return name, address, price, overall_price, distance, urls
+        url = f"https://ru.hotels.com/ho{variant['id']}"
+        print(url)
+        return name, address, price, overall_price, distance, urls, url
 
     def get_response(self, user_data):
         self.db_insert(user_data)
@@ -114,7 +115,7 @@ class Query:
             for i, variant in enumerate(list_of_variants):
                 if i == self.number_of_variants or i > len(list_of_variants):
                     break
-                name, address, price, overall_price, distance, urls = self.for_each_variant(variant)
+                name, address, price, overall_price, distance, urls, url = self.for_each_variant(variant)
                 if urls is not None:
                     urls = urls.copy()
                 current_data = {
@@ -123,7 +124,8 @@ class Query:
                         "Стоимость": price,
                         "Общая стоимость": overall_price,
                         "Расстояние от центра": distance,
-                        "Фотографии": urls
+                        "Фотографии": urls,
+                        "Подробнее": url
                     }
                 photos = current_data.pop("Фотографии")
                 string = "\n".join([key + ": " + value for key, value in current_data.items()])
