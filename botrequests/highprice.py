@@ -13,6 +13,6 @@ API_KEY = os.getenv('x-rapidapi-key')
 
 class QueryHighprice(Query):
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, bot):
+        super().__init__(bot)
         self.sorting = "PRICE_HIGHEST_FIRST"

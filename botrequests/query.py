@@ -4,6 +4,8 @@ import requests
 import os
 import json
 
+from telebot.types import InputMediaPhoto
+
 from database import Database
 from dotenv import load_dotenv
 
@@ -12,20 +14,6 @@ load_dotenv()
 API_KEY = os.getenv('x-rapidapi-key')
 
 
-def db_insert(user_data):
-    Database.insert(user_data)
-
-
-def db_get_tuple():
-    Database.sql.execute('SELECT city_of_destination, number_of_variants, number_of_photos, arrival, departure '
-                         'FROM users')
-
-    tuple_of_data = Database.sql.fetchall()[-1]
-    city_of_destination = tuple_of_data[0]
-    number_of_variants = int(tuple_of_data[1])
-    number_of_photos = int(tuple_of_data[2])
-    arrival, departure = tuple_of_data[3], tuple_of_data[4]
-    return city_of_destination, number_of_variants, number_of_photos, arrival, departure
 
 
 class Query:
@@ -46,13 +34,28 @@ class Query:
         'x-rapidapi-key': API_KEY
     }
 
-    def __init__(self):
+    def __init__(self, bot):
+        self.bot = bot
         self.departure = None
         self.number_of_photos = None
         self.number_of_variants = None
         self.city_of_destination = None
         self.arrival = None
         self.sorting = "PRICE"
+
+    @staticmethod
+    def db_insert(user_data):
+        Database.insert(user_data)
+
+    def db_get_tuple(self):
+        Database.sql.execute('SELECT city_of_destination, number_of_variants, number_of_photos, arrival, departure '
+                             'FROM users')
+
+        tuple_of_data = Database.sql.fetchall()[-1]
+        self.city_of_destination = tuple_of_data[0]
+        self.number_of_variants = int(tuple_of_data[1])
+        self.number_of_photos = int(tuple_of_data[2])
+        self.arrival, self.departure = tuple_of_data[3], tuple_of_data[4]
 
     def get_photos(self, number_of_photos, hotel_id):
         querystring_getphotos = {"id": hotel_id}
@@ -79,16 +82,17 @@ class Query:
         price = variant["ratePlan"]["price"]["current"]
         d1 = datetime.strptime(self.arrival, "%Y-%m-%d")
         d2 = datetime.strptime(self.departure, "%Y-%m-%d")
-        overall_price = "$" + str(int(price[1:]) * (d2 - d1).days)
+        overall_price = "$" + str(int(variant["ratePlan"]["price"]["exactCurrent"]) * (d2 - d1).days)
         print("price is correct")
         distance = variant["landmarks"][0]["distance"]
         # print(list_of_variants[i]["landmarks"])
         print("distance is correct")
-        return name, address, price, overall_price, distance, urls.copy()
+        print(name, address, price, overall_price, distance, urls)
+        return name, address, price, overall_price, distance, urls
 
     def get_response(self, user_data):
-        db_insert(user_data)
-        self.city_of_destination, self.number_of_variants, self.number_of_photos, self.arrival, self.departure = db_get_tuple()
+        self.db_insert(user_data)
+        self.db_get_tuple()
         querystring = {"query": self.city_of_destination, "locale": "ru"}
         response = requests.request("GET", self.URL, headers=self.HEADERS, params=querystring)
         dict_of_response = json.loads(response.text)
@@ -108,11 +112,12 @@ class Query:
             print("lov is correct")
             data = []
             for i, variant in enumerate(list_of_variants):
-                if i == self.number_of_variants:
+                if i == self.number_of_variants or i > len(list_of_variants):
                     break
                 name, address, price, overall_price, distance, urls = self.for_each_variant(variant)
-                data.append(
-                    {
+                if urls is not None:
+                    urls = urls.copy()
+                current_data = {
                         "Название отеля": name,
                         "Адрес": address,
                         "Стоимость": price,
@@ -120,9 +125,27 @@ class Query:
                         "Расстояние от центра": distance,
                         "Фотографии": urls
                     }
-                )
+                photos = current_data.pop("Фотографии")
+                string = "\n".join([key + ": " + value for key, value in current_data.items()])
+                self.bot.send_message(user_data['id'], string)
+                print(string)
+                if photos is not None:
+                    print("there are photos to send")
+                    photos_tg = [InputMediaPhoto(media=el) for el in photos]
+                    self.bot.send_media_group(user_data['id'], photos_tg)
+                # data.append(
+                #     {
+                #         "Название отеля": name,
+                #         "Адрес": address,
+                #         "Стоимость": price,
+                #         "Общая стоимость": overall_price,
+                #         "Расстояние от центра": distance,
+                #         "Фотографии": urls
+                #     }
+                # )
 
         except Exception as e:
             return e
         else:
-            return data
+            # return data
+            pass

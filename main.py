@@ -1,24 +1,11 @@
-import datetime
-
-import telebot
-import os
-
+import datetime as dt
+from bot_start import BOT
 from telebot import types
-from telebot.types import InputMediaPhoto
+from telegram_bot_calendar import DetailedTelegramCalendar as Calendar
 
 from botrequests.bestdeal import QueryBestdeal
 from botrequests.highprice import QueryHighprice
 from botrequests.lowprice import QueryLowprice
-from dotenv import load_dotenv
-from datetime import datetime
-import datetime as dt
-from telegram_bot_calendar import DetailedTelegramCalendar as Calendar
-
-load_dotenv()
-
-TOKEN = os.getenv("TOKEN")
-API_KEY = os.getenv('x-rapidapi-key')
-BOT = telebot.TeleBot(TOKEN)
 
 
 def check_dates(date1, date2=None):
@@ -210,7 +197,8 @@ class DialogHandler(User):
                                   "Понял! Работаю...")
             self.get_answer()
 
-        except Exception:
+        except ValueError as e:
+            print(e)
             self.bot.send_message(self.id, " Введи корректное число 👉🏻👈🏻\nСколько вариантов тебе показать?")
             self.bot.register_next_step_handler(message, self.get_number_of_variants)
 
@@ -223,34 +211,36 @@ class DialogHandler(User):
         ql = None
         print(user_data)
         if self.command == "/lowprice":
-            ql = QueryLowprice()
+            ql = QueryLowprice(BOT)
         elif self.command == "/highprice":
-            ql = QueryHighprice()
+            ql = QueryHighprice(BOT)
         elif self.command == "/bestdeal":
-            ql = QueryBestdeal()
+            ql = QueryBestdeal(BOT)
         self.response = ql.get_response(user_data)
         if isinstance(self.response, Exception):
             self.bot.send_message(self.id, 'Извини, я ничего не нашел😣')
             return
-        self.send_response()
+        # self.send_response()
 
-    def send_response(self):
-        for result in self.response:
-            photos = result.pop("Фотографии")
-            print(photos)
-            string = "\n".join([key + ": " + value for key, value in result.items()])
-            self.bot.send_message(self.id, string)
-            print(string)
-            if photos is not None:
-                print("there are photos to send")
-                photos_tg = [InputMediaPhoto(media=el) for el in photos]
-                self.bot.send_media_group(self.id, photos_tg)
+    # def send_response(self):
+    #     for result in self.response:
+    #         photos = result.pop("Фотографии")
+    #         print(photos)
+    #         string = "\n".join([key + ": " + value for key, value in result.items()])
+    #         self.bot.send_message(self.id, string)
+    #         print(string)
+    #         if photos is not None:
+    #             print("there are photos to send")
+    #             photos_tg = [InputMediaPhoto(media=el) for el in photos]
+    #             self.bot.send_media_group(self.id, photos_tg)
 
 
 class DialogHandlerLowprice(DialogHandler):
 
     def get_answer(self):
         print("Мне повезло повезло я лоупрайс")
+        number_of_photos = self.user_data.get("number_of_photos", 0)
+        self.user_data['number_of_photos'] = number_of_photos
         BOT.clear_step_handler_by_chat_id(self.id)
         print(self.user_data)
         self.get_query(self.user_data)
@@ -260,6 +250,8 @@ class DialogHandlerHighprice(DialogHandler):
 
     def get_answer(self):
         print("Мне повезло повезло я хайпрайс")
+        number_of_photos = self.user_data.get("number_of_photos", 0)
+        self.user_data['number_of_photos'] = number_of_photos
         print(self.user_data)
         BOT.clear_step_handler_by_chat_id(self.id)
         self.get_query(self.user_data)
@@ -289,7 +281,7 @@ class DialogHandlerBestDeal(DialogHandler):
 
     def get_min_price(self, message):
         try:
-            self.user_data["min_price"] = float(message.text)
+            self.user_data["min_price"] = int(message.text)
             self.bot.send_message(self.id, "Супер! Tеперь максимальную ($)")
             self.bot.register_next_step_handler(message, self.get_max_price)
         except Exception:
@@ -298,10 +290,10 @@ class DialogHandlerBestDeal(DialogHandler):
 
     def get_max_price(self, message):
         try:
-            self.user_data["max_price"] = float(message.text)
+            self.user_data["max_price"] = int(message.text)
             if self.user_data["max_price"] <= self.user_data["min_price"]:
                 raise Exception
-            self.bot.send_message(self.id, "Супер! Теперь введи максимальное предпочтительное расстояние от центра")
+            self.bot.send_message(self.id, "Введи максимальное предпочтительное расстояние от центра (miles)")
             self.bot.register_next_step_handler(message, self.get_miles)
         except Exception:
             self.bot.send_message(self.id, " Введи корректную цену 👉🏻👈🏻")
@@ -322,6 +314,8 @@ class DialogHandlerBestDeal(DialogHandler):
     def get_answer(self):
         print("Мне повезло повезло я бест деал")
         print(self.user_data)
+        number_of_photos = self.user_data.get("number_of_photos", 0)
+        self.user_data['number_of_photos'] = number_of_photos
         BOT.clear_step_handler_by_chat_id(self.id)
         self.get_query(self.user_data)
 
