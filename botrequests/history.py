@@ -1,7 +1,5 @@
-from datetime import  datetime
-
-from database import Database
 from bot_start import BOT
+from database import Database
 
 
 def history(user_id):

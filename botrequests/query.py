@@ -78,32 +78,22 @@ class Query:
         if self.number_of_photos > 0:
             hotel_id = variant["id"]
             urls = self.get_photos(self.number_of_photos, hotel_id)
-            print("urls are correct")
-        print(variant)
         name = variant["name"]
-        print("name is correct")
         address = variant["address"].get('streetAddress', '🤔')
-        print("address is correct")
         price = variant["ratePlan"]["price"]["current"]
         d1 = datetime.datetime.strptime(self.arrival, "%Y-%m-%d")
         d2 = datetime.datetime.strptime(self.departure, "%Y-%m-%d")
         overall_price = "$" + str(int(variant["ratePlan"]["price"]["exactCurrent"]) * (d2 - d1).days)
-        print("price is correct")
         distance = variant["landmarks"][0]["distance"]
-        # print(list_of_variants[i]["landmarks"])
-        print("distance is correct")
         url = f"https://ru.hotels.com/ho{variant['id']}"
-        print(url)
         return name, address, price, overall_price, distance, urls, url
 
     def get_response(self, user_data):
-        print(user_data)
         self.db_insert(user_data)
         self.db_get_tuple()
         querystring = {"query": self.city_of_destination, "locale": "ru"}
         response = requests.request("GET", self.URL, headers=self.HEADERS, params=querystring)
         dict_of_response = json.loads(response.text)
-        print("database is ok")
         try:
             destination_id = dict_of_response['suggestions'][0]['entities'][1]['destinationId']
             querystring = {"destinationId": destination_id, "pageNumber": "1", "pageSize": "25",
@@ -114,9 +104,7 @@ class Query:
             response = requests.request("GET", self.URL_COMMAND, headers=self.HEADERS_COMMAND,
                                         params=querystring)
             dict_of_response = json.loads(response.text)
-            print("json is correct")
             list_of_variants = dict_of_response['data']["body"]["searchResults"]["results"]
-            print("lov is correct")
             for i, variant in enumerate(list_of_variants):
                 if i == self.number_of_variants or i > len(list_of_variants):
                     break
@@ -139,14 +127,10 @@ class Query:
                 photos = current_data.pop("Фотографии")
                 string = "\n".join([key + ": " + value for key, value in current_data.items()])
                 self.bot.send_message(user_data['id'], string, disable_web_page_preview=True)
-                print(string)
                 if photos is not None:
-                    print("there are photos to send")
                     photos_tg = [InputMediaPhoto(media=el) for el in photos]
                     self.bot.send_media_group(user_data['id'], photos_tg)
         except Exception as e:
-            print(e)
             return e
         else:
-            # return data
             pass

@@ -40,7 +40,6 @@ class QueryBestdeal(Query):
         name, address, price, overall_price, distance, urls, url = super().for_each_variant(variant)
         miles = int(distance.replace(" miles", ""))
         if miles > self.miles:
-            print('its none')
             return None
         return name, address, price, overall_price, distance, urls, url
 
@@ -50,10 +49,8 @@ class QueryBestdeal(Query):
         querystring = {"query": self.city_of_destination, "locale": "ru"}
         response = requests.request("GET", self.URL, headers=self.HEADERS, params=querystring)
         dict_of_response = json.loads(response.text)
-        print("database is ok")
         try:
             destination_id = dict_of_response['suggestions'][0]['entities'][1]['destinationId']
-            print(destination_id)
             querystring = {"destinationId": destination_id, "pageNumber": "1", "pageSize": "25",
                            "checkIn": str(self.arrival), "priceMin": str(self.min_price), "priceMax": self.max_price,
                            "checkOut": self.departure, "adults1": "1", "sortOrder": self.sorting, "locale": "ru",
@@ -62,12 +59,9 @@ class QueryBestdeal(Query):
             response = requests.request("GET", self.URL_COMMAND, headers=self.HEADERS_COMMAND,
                                         params=querystring)
             dict_of_response = json.loads(response.text)
-            print("json is correct")
             list_of_variants = dict_of_response['data']["body"]["searchResults"]["results"]
-            print("lov is correct")
             count_of_valid_variants = 0
             for variant in list_of_variants:
-                print(self.number_of_variants)
                 if count_of_valid_variants == self.number_of_variants or count_of_valid_variants > len(
                         list_of_variants):
                     break
@@ -89,7 +83,6 @@ class QueryBestdeal(Query):
                     hotel_data = {"user_id": self.user_id, "name": name, "address": address, "price": price, "url": url,
                                   "distance": distance, "uploaded_at": uploaded_at}
                     self.db_insert_hotel_data(hotel_data)
-                    print(current_data)
                     photos = current_data.pop("Фотографии")
                     string = "\n".join([key + ": " + value for key, value in current_data.items()])
                     self.bot.send_message(user_data['id'], string, disable_web_page_preview=True)
@@ -98,11 +91,10 @@ class QueryBestdeal(Query):
                         self.bot.send_media_group(user_data['id'], photos_tg)
 
                 except Exception as e:
-                    print(e)
                     continue
 
         except Exception as e:
             return e
         else:
             pass
-            # return data
+

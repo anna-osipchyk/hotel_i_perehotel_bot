@@ -1,12 +1,12 @@
 import datetime
-import datetime as dt
-from bot_start import BOT
+
 from telebot import types
 from telegram_bot_calendar import DetailedTelegramCalendar
 
-from botrequests.history import history
+from bot_start import BOT
 from botrequests.bestdeal import QueryBestdeal
 from botrequests.highprice import QueryHighprice
+from botrequests.history import history
 from botrequests.lowprice import QueryLowprice
 
 
@@ -224,7 +224,7 @@ class DialogHandler(User):
                                   "Понял! Работаю...")
             self.get_answer()
 
-        except ValueError as e:
+        except ValueError:
             self.bot.send_message(self.id, " Введи корректное число 👉🏻👈🏻\nСколько вариантов тебе показать?")
             self.bot.register_next_step_handler(message, self.get_number_of_variants)
         except Exception:
