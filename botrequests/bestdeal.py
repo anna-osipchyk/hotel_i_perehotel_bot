@@ -1,4 +1,4 @@
-from datetime import datetime
+import datetime
 
 import requests
 import os
@@ -24,7 +24,6 @@ class QueryBestdeal(Query):
         self.miles = None
         self.sorting = "PRICE"
 
-
     def db_get_tuple(self):
         Database.sql.execute('SELECT city_of_destination, number_of_variants, number_of_photos, arrival, departure, '
                              'miles, min_price, max_price FROM users')
@@ -39,7 +38,6 @@ class QueryBestdeal(Query):
 
     def for_each_variant(self, variant):
         name, address, price, overall_price, distance, urls, url = super().for_each_variant(variant)
-        exact_price = int(variant["ratePlan"]["price"]["exactCurrent"])
         miles = int(distance.replace(" miles", ""))
         if miles > self.miles:
             print('its none')
@@ -67,15 +65,15 @@ class QueryBestdeal(Query):
             print("json is correct")
             list_of_variants = dict_of_response['data']["body"]["searchResults"]["results"]
             print("lov is correct")
-            data = []
             count_of_valid_variants = 0
             for variant in list_of_variants:
                 print(self.number_of_variants)
-                if count_of_valid_variants == self.number_of_variants or count_of_valid_variants > len(list_of_variants):
+                if count_of_valid_variants == self.number_of_variants or count_of_valid_variants > len(
+                        list_of_variants):
                     break
                 try:
                     name, address, price, overall_price, distance, urls, url = self.for_each_variant(variant)
-                    count_of_valid_variants+=1
+                    count_of_valid_variants += 1
                     if urls is not None:
                         urls = urls.copy()
                     current_data = {
@@ -87,23 +85,18 @@ class QueryBestdeal(Query):
                         "Фотографии": urls,
                         "Подробнее": url
                     }
+                    uploaded_at = datetime.datetime.today().strftime("%Y-%m-%d %H.%M")
+                    hotel_data = {"user_id": self.user_id, "name": name, "address": address, "price": price, "url": url,
+                                  "distance": distance, "uploaded_at": uploaded_at}
+                    self.db_insert_hotel_data(hotel_data)
                     print(current_data)
                     photos = current_data.pop("Фотографии")
                     string = "\n".join([key + ": " + value for key, value in current_data.items()])
-                    self.bot.send_message(user_data['id'], string)
+                    self.bot.send_message(user_data['id'], string, disable_web_page_preview=True)
                     if photos is not None:
                         photos_tg = [InputMediaPhoto(media=el) for el in photos]
                         self.bot.send_media_group(user_data['id'], photos_tg)
-                    # data.append(
-                    #     {
-                    #         "Название отеля": name,
-                    #         "Адрес": address,
-                    #         "Стоимость": price,
-                    #         "Общая стоимость": overall_price,
-                    #         "Расстояние от центра": distance,
-                    #         "Фотографии": urls
-                    #     }
-                    # )
+
                 except Exception as e:
                     print(e)
                     continue

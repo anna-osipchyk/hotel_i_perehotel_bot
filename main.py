@@ -4,6 +4,7 @@ from bot_start import BOT
 from telebot import types
 from telegram_bot_calendar import DetailedTelegramCalendar
 
+from botrequests.history import history
 from botrequests.bestdeal import QueryBestdeal
 from botrequests.highprice import QueryHighprice
 from botrequests.lowprice import QueryLowprice
@@ -179,6 +180,8 @@ class DialogHandler(User):
     def get_number_of_photos(self, message):
         number_of_photos = message.text
         try:
+            if message.content_type != 'text':
+                raise ValueError
             self.user_data['number_of_photos'] = int(number_of_photos)
             self.bot.send_message(self.id, f"Класс, теперь"
                                            f" отправь мне название города,"
@@ -194,14 +197,26 @@ class DialogHandler(User):
                                   "Что-то пошло не так... Отправь команду заново😇")
 
     def get_city(self, message):
-        self.user_data['city_of_destination'] = message.text
-        self.user_data['id'] = message.from_user.id
-        self.bot.send_message(self.id,
-                              "Сколько вариантов тебе нужно?")
-        self.bot.register_next_step_handler(message, self.get_number_of_variants)
+        try:
+            if message.content_type != 'text':
+                raise ValueError
+            self.user_data['city_of_destination'] = message.text
+            self.user_data['id'] = message.from_user.id
+            self.bot.send_message(self.id,
+                                  "Сколько вариантов тебе нужно?")
+            self.bot.register_next_step_handler(message, self.get_number_of_variants)
+        except ValueError:
+            self.bot.send_message(self.id, "Ты точно отправил мне название города 🤔? Давай по новой!")
+            self.bot.register_next_step_handler(message, self.get_city)
+
+        except Exception:
+            self.bot.send_message(self.id,
+                                  "Что-то пошло не так... Отправь команду заново😇")
 
     def get_number_of_variants(self, message):
         try:
+            if message.content_type != 'text':
+                raise ValueError
             self.user_data['number_of_variants'] = int(message.text)
             if self.user_data['number_of_variants'] <= 0:
                 raise ValueError
@@ -270,14 +285,26 @@ class DialogHandlerHighprice(DialogHandler):
 
 class DialogHandlerBestDeal(DialogHandler):
     def get_city(self, message):
-        self.user_data['city_of_destination'] = message.text
-        self.user_data['id'] = message.from_user.id
-        self.bot.send_message(self.id,
-                              "Сколько вариантов тебе нужно?")
-        self.bot.register_next_step_handler(message, self.get_number_of_variants)
+        if message.content_type != 'text':
+            raise ValueError
+        try:
+            self.user_data['city_of_destination'] = str(message.text)
+            self.user_data['id'] = message.from_user.id
+            self.bot.send_message(self.id,
+                                  "Сколько вариантов тебе нужно?")
+            self.bot.register_next_step_handler(message, self.get_number_of_variants)
+        except ValueError:
+            self.bot.send_message(self.id, "Ты точно отправил мне название города 🤔? Давай по новой!")
+            self.bot.register_next_step_handler(message, self.get_city)
+
+        except Exception:
+            self.bot.send_message(self.id,
+                                  "Что-то пошло не так... Отправь команду заново😇")
 
     def get_number_of_variants(self, message):
         try:
+            if message.content_type != 'text':
+                raise ValueError
             self.user_data['number_of_variants'] = int(message.text)
             if self.user_data['number_of_variants'] <= 0:
                 raise ValueError
@@ -295,12 +322,16 @@ class DialogHandlerBestDeal(DialogHandler):
 
     def get_min_price(self, message):
         try:
+            if message.content_type != 'text':
+                raise ValueError
             self.user_data["min_price"] = int(message.text)
             if self.user_data['min_price'] <= 0:
                 raise ValueError
             self.bot.send_message(self.id, "Супер! Tеперь максимальную ($)")
             self.bot.register_next_step_handler(message, self.get_max_price)
         except ValueError:
+            if message['content_type'] != 'text':
+                raise ValueError
             self.bot.send_message(self.id, " Введи корректную цену 👉🏻👈🏻")
             self.bot.register_next_step_handler(message, self.get_min_price)
 
@@ -310,6 +341,8 @@ class DialogHandlerBestDeal(DialogHandler):
 
     def get_max_price(self, message):
         try:
+            if message.content_type != 'text':
+                raise ValueError
             self.user_data["max_price"] = int(message.text)
             if self.user_data["max_price"] <= self.user_data["min_price"]:
                 raise ValueError
@@ -325,6 +358,8 @@ class DialogHandlerBestDeal(DialogHandler):
 
     def get_miles(self, message):
         try:
+            if message.content_type != 'text':
+                raise ValueError
             self.user_data["miles"] = int(message.text)
             if self.user_data["miles"] <= 0:
                 raise ValueError
@@ -343,6 +378,7 @@ class DialogHandlerBestDeal(DialogHandler):
         print("Мне повезло повезло я бест деал")
         number_of_photos = self.user_data.get("number_of_photos", 0)
         self.user_data['number_of_photos'] = number_of_photos
+        print(self.user_data)
         BOT.clear_step_handler_by_chat_id(self.id)
         self.get_query(self.user_data)
 
@@ -361,7 +397,8 @@ def get_text_message(message):
         user.get_dates(user.id)
 
     elif message.text == '/history':
-        pass
+        user = User.get_user(message.from_user.id, message.text)
+        history(user.id)
 
 
 @BOT.message_handler(content_types=["text"])
