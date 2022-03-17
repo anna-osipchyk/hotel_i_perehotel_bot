@@ -16,10 +16,10 @@ Thumbs.db
 __pycache__/
 *.py[cod]
 *$py.class
-
+telebot.db
 # C extensions
 *.so
-
+.env*
 # Distribution / packaging
 .Python
 build/
