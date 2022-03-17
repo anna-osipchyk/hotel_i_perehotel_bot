@@ -8,11 +8,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-API_KEY = os.getenv('x-rapidapi-key')
+API_KEY = os.getenv("x-rapidapi-key")
 
 
 class QueryHighprice(Query):
-
     def __init__(self, bot):
         super().__init__(bot)
         self.sorting = "PRICE_HIGHEST_FIRST"

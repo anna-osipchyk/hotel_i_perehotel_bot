@@ -6,7 +6,7 @@ from botrequests.query import Query
 
 load_dotenv()
 
-API_KEY = os.getenv('x-rapidapi-key')
+API_KEY = os.getenv("x-rapidapi-key")
 
 
 class QueryLowprice(Query):
