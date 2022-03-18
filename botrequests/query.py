@@ -1,4 +1,5 @@
 import datetime
+import logging
 
 import requests
 import os
@@ -29,9 +30,18 @@ class Query:
         "x-rapidapi-key": API_KEY,
     }
 
-    def __init__(self, bot):
+    def __init__(self, bot, user_id):
+        self.logger = logging.getLogger(__name__)
+        consoleHandler = logging.StreamHandler()
+        self.logger.addHandler(consoleHandler)
+        logging.basicConfig(
+            filename="logging.log",
+            level=logging.INFO,
+            format="%(asctime)s - [%(levelname)s]  - (%(filename)s).%(funcName)s(%(lineno)d) - %("
+            "message)s",
+        )
         self.bot = bot
-        self.user_id = None
+        self.user_id = user_id
         self.departure = None
         self.number_of_photos = None
         self.number_of_variants = None
@@ -49,11 +59,10 @@ class Query:
 
     def db_get_tuple(self):
         Database.sql.execute(
-            "SELECT city_of_destination, number_of_variants, number_of_photos, arrival, departure, "
-            "user_id "
-            "FROM users"
+            f"SELECT city_of_destination, number_of_variants, number_of_photos, arrival, departure, "
+            f"user_id "
+            f"FROM users WHERE user_id = {self.user_id}"
         )
-
         tuple_of_data = Database.sql.fetchall()[-1]
         self.city_of_destination = tuple_of_data[0]
         self.number_of_variants = int(tuple_of_data[1])
@@ -98,12 +107,19 @@ class Query:
 
     def get_response(self, user_data):
         self.db_insert(user_data)
+        self.logger.info("Insert запрос в базу данных завершен")
         self.db_get_tuple()
+        self.logger.info(
+            "Select запрос в базу данных завершен. Необходимые данные получены"
+        )
         querystring = {"query": self.city_of_destination, "locale": "ru_RU"}
         response = requests.request(
             "GET", self.URL, headers=self.HEADERS, params=querystring
         )
         dict_of_response = json.loads(response.text)
+        self.logger.info(
+            f"Ответ 1 от сервера получен со статус кодом {response.status_code}"
+        )
         try:
             destination_id = dict_of_response["suggestions"][0]["entities"][1][
                 "destinationId"
@@ -127,6 +143,10 @@ class Query:
                 params=querystring,
             )
             dict_of_response = json.loads(response.text)
+            self.logger.info(
+                f"Ответ 2 от сервера получен со статус кодом {response.status_code}"
+            )
+
             list_of_variants = dict_of_response["data"]["body"]["searchResults"][
                 "results"
             ]
@@ -175,6 +195,7 @@ class Query:
                     photos_tg = [InputMediaPhoto(media=el) for el in photos]
                     self.bot.send_media_group(user_data["id"], photos_tg)
         except Exception as e:
+            self.logger.error(e)
             return e
         else:
             return 0

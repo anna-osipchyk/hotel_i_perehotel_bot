@@ -159,12 +159,17 @@ class User(CommandMixin):
                 yes_btn = types.InlineKeyboardButton(text="да", callback_data="yes_1")
                 no_btn = types.InlineKeyboardButton(text="нет", callback_data="no_1")
                 keyboard.add(yes_btn, no_btn)
+                logger.info(f"Пользователь {c.message.chat.id} запросил дату {result}")
                 BOT.send_message(
                     c.message.chat.id,
                     f"Твоя выбранная дата: {result}. Все верно?",
                     reply_markup=keyboard,
                 )
             else:
+
+                logger.warning(
+                    f"Пользователь {c.message.chat.id} запросил некорректную дату"
+                )
                 BOT.send_message(
                     c.message.chat.id, f"Неверная дата! Давай попробуем еще раз"
                 )
@@ -196,6 +201,7 @@ class User(CommandMixin):
                 yes_btn = types.InlineKeyboardButton(text="да", callback_data="yes_2")
                 no_btn = types.InlineKeyboardButton(text="нет", callback_data="no_2")
                 keyboard.add(yes_btn, no_btn)
+                logger.info(f"Пользователь {c.message.chat.id} запросил дату {result}")
                 BOT.send_message(
                     c.message.chat.id,
                     f"Твоя выбранная дата: {result}. Все верно?",
@@ -205,7 +211,9 @@ class User(CommandMixin):
                 BOT.send_message(
                     c.message.chat.id, f"Неверная дата! Давай попробуем еще раз"
                 )
-                logger.warning(f"Пользователь {c.message.chat.id} выбрал неверную дату")
+                logger.warning(
+                    f"Пользователь {c.message.chat.id} запросил некорректную дату"
+                )
                 calendar, step = Calendar(locale="ru", calendar_id=2).build()
                 BOT.send_message(
                     c.message.chat.id, f"Выбери нужный год: ", reply_markup=calendar
@@ -239,7 +247,7 @@ class DialogHandler(User):
 
         except ValueError:
             logger.warning(
-                f"Пользователь {self.id} выбрал неправильное число фотографий"
+                f"Пользователь {self.id} запросил некорректное число фотографий"
             )
             self.bot.send_message(
                 self.id,
@@ -247,8 +255,8 @@ class DialogHandler(User):
             )
             self.bot.register_next_step_handler(message, self.get_number_of_photos)
         except Exception:
-            logger.info(
-                f"Цикл обработки данных пользователя {self.id} успешно завершен"
+            logger.error(
+                f"Цикл обработки данных пользователя {self.id} завершен с ошибкой"
             )
             self.bot.send_message(
                 self.id, "Что-то пошло не так... Отправь команду заново😇"
@@ -258,7 +266,7 @@ class DialogHandler(User):
         try:
             if message.content_type != "text":
                 raise ValueError
-            logger.info(f"Пользователь {self.id} выбрал город {message.text}")
+            logger.info(f"Пользователь {self.id} запросил город {message.text}")
             self.user_data["city_of_destination"] = message.text
             self.user_data["id"] = message.from_user.id
             self.bot.send_message(self.id, "Сколько вариантов тебе нужно?")
@@ -267,12 +275,12 @@ class DialogHandler(User):
             self.bot.send_message(
                 self.id, "Ты точно отправил мне название города 🤔? Давай по новой!"
             )
-            logger.warning(f"Пользователь {self.id} выбрал неверное название города")
+            logger.warning(f"Пользователь {self.id} запросил неверное название города")
             self.bot.register_next_step_handler(message, self.get_city)
 
         except Exception:
-            logger.info(
-                f"Цикл обработки данных пользователя {self.id} успешно завершен"
+            logger.error(
+                f"Цикл обработки данных пользователя {self.id} завершен с ошибкой"
             )
             self.bot.send_message(
                 self.id, "Что-то пошло не так... Отправь команду заново😇"
@@ -285,7 +293,9 @@ class DialogHandler(User):
             self.user_data["number_of_variants"] = int(message.text)
             if self.user_data["number_of_variants"] <= 0:
                 raise ValueError
-            logger.info(f"Пользователь {self.id} выбрал кол-во городов {message.text}")
+            logger.info(
+                f"Пользователь {self.id} запросил кол-во вариантов {message.text}"
+            )
             self.bot.send_message(self.id, "Понял! Работаю...")
             self.get_answer()
 
@@ -294,10 +304,10 @@ class DialogHandler(User):
                 self.id,
                 " Введи корректное число 👉🏻👈🏻\nСколько вариантов тебе показать?",
             )
-            logger.warning(f"Пользователь {self.id} выбрал неверное число вариантов")
+            logger.warning(f"Пользователь {self.id} запросил неверное число вариантов")
             self.bot.register_next_step_handler(message, self.get_number_of_variants)
         except Exception:
-            logger.info(
+            logger.error(
                 f"Цикл обработки данных пользователя {self.id} завершен с ошибкой"
             )
             self.bot.send_message(
@@ -310,11 +320,11 @@ class DialogHandler(User):
     def get_query(self, user_data):
         ql = None
         if self.command == "/lowprice":
-            ql = QueryLowprice(BOT)
+            ql = QueryLowprice(BOT, self.id)
         elif self.command == "/highprice":
-            ql = QueryHighprice(BOT)
+            ql = QueryHighprice(BOT, self.id)
         elif self.command == "/bestdeal":
-            ql = QueryBestdeal(BOT)
+            ql = QueryBestdeal(BOT, self.id)
         self.response = ql.get_response(user_data)
         if isinstance(self.response, Exception):
             logger.info(f"Данные по запросу пользователя {self.id} не найдены")
@@ -330,6 +340,7 @@ class DialogHandler(User):
 
 class DialogHandlerLowprice(DialogHandler):
     def get_answer(self):
+        logger.info("Вызвана функция get_answer lowprice")
         number_of_photos = self.user_data.get("number_of_photos", 0)
         self.user_data["number_of_photos"] = number_of_photos
         BOT.clear_step_handler_by_chat_id(self.id)
@@ -338,6 +349,7 @@ class DialogHandlerLowprice(DialogHandler):
 
 class DialogHandlerHighprice(DialogHandler):
     def get_answer(self):
+        logger.info("Вызвана функция get_answer highprice")
         number_of_photos = self.user_data.get("number_of_photos", 0)
         self.user_data["number_of_photos"] = number_of_photos
         BOT.clear_step_handler_by_chat_id(self.id)
@@ -357,7 +369,7 @@ class DialogHandlerBestDeal(DialogHandler):
             self.bot.register_next_step_handler(message, self.get_number_of_variants)
         except ValueError:
             logger.warning(
-                f"Пользователь {self.id} выбрал некорректное название города"
+                f"Пользователь {self.id} запросил некорректное название города"
             )
             self.bot.send_message(
                 self.id, "Ты точно отправил мне название города 🤔? Давай по новой!"
@@ -365,8 +377,8 @@ class DialogHandlerBestDeal(DialogHandler):
             self.bot.register_next_step_handler(message, self.get_city)
 
         except Exception:
-            logger.info(
-                f"Цикл обработки данных пользователя {self.id} успешно завершен"
+            logger.error(
+                f"Цикл обработки данных пользователя {self.id} завершен с ошибкой"
             )
             self.bot.send_message(
                 self.id, "Что-то пошло не так... Отправь команду заново😇"
@@ -388,7 +400,7 @@ class DialogHandlerBestDeal(DialogHandler):
 
         except ValueError:
             logger.warning(
-                f"Пользователь {self.id} выбрал некорректное число вариантов"
+                f"Пользователь {self.id} запросил некорректное число вариантов"
             )
             self.bot.send_message(
                 self.id,
@@ -397,8 +409,8 @@ class DialogHandlerBestDeal(DialogHandler):
             self.bot.register_next_step_handler(message, self.get_number_of_variants)
 
         except Exception:
-            logger.info(
-                f"Цикл обработки данных пользователя {self.id} успешно завершен"
+            logger.error(
+                f"Цикл обработки данных пользователя {self.id} завершен с ошибкой"
             )
             self.bot.send_message(
                 self.id, "Что-то пошло не так... Отправь команду заново😇"
@@ -419,14 +431,14 @@ class DialogHandlerBestDeal(DialogHandler):
             self.bot.register_next_step_handler(message, self.get_max_price)
         except ValueError:
             logger.warning(
-                f"Пользователь {self.id} выбрал некорректную минимальную цену"
+                f"Пользователь {self.id} запросил некорректную минимальную цену"
             )
             self.bot.send_message(self.id, " Введи корректную цену 👉🏻👈🏻")
             self.bot.register_next_step_handler(message, self.get_min_price)
 
         except Exception:
-            logger.info(
-                f"Цикл обработки данных пользователя {self.id} успешно завершен"
+            logger.error(
+                f"Цикл обработки данных пользователя {self.id} завершен с ошибкой"
             )
             self.bot.send_message(
                 self.id, "Что-то пошло не так... Отправь команду заново😇"
@@ -441,20 +453,20 @@ class DialogHandlerBestDeal(DialogHandler):
                 raise ValueError
             self.bot.send_message(
                 self.id,
-                "Введи максимальное предпочтительное расстояние от центра (miles)",
+                "Введи максимальное предпочтительное расстояние от центра (км)",
             )
             logger.info(
                 f"Пользователь {self.id} запросил максимальную цену {message.text}"
             )
             self.bot.register_next_step_handler(message, self.get_miles)
         except ValueError:
-            logger.warning(f"Пользователь {self.id} выбрал некорректную цену")
+            logger.warning(f"Пользователь {self.id} запросил некорректную цену")
             self.bot.send_message(self.id, " Введи корректную цену 👉🏻👈🏻")
             self.bot.register_next_step_handler(message, self.get_max_price)
 
         except Exception:
-            logger.info(
-                f"Цикл обработки данных пользователя {self.id} успешно завершен"
+            logger.error(
+                f"Цикл обработки данных пользователя {self.id} завершен с ошибкой"
             )
             self.bot.send_message(
                 self.id, "Что-то пошло не так... Отправь команду заново😇"
@@ -472,28 +484,30 @@ class DialogHandlerBestDeal(DialogHandler):
             self.get_answer()
         except ValueError:
             logger.warning(
-                f"Пользователь {self.id} выбрал некорректную удаленность от центра"
+                f"Пользователь {self.id} запросил некорректную удаленность от центра"
             )
             self.bot.send_message(self.id, " Введи корректные данные🥺")
             self.bot.register_next_step_handler(message, self.get_miles)
 
         except Exception:
-            logger.info(
-                f"Цикл обработки данных пользователя {self.id} успешно завершен"
+            logger.error(
+                f"Цикл обработки данных пользователя {self.id} завершен с ошибкой"
             )
             self.bot.send_message(
                 self.id, "Что-то пошло не так... Отправь команду заново😇"
             )
 
     def get_answer(self):
+        logger.info("Вызвана функция get_answer bestdeal")
         number_of_photos = self.user_data.get("number_of_photos", 0)
         self.user_data["number_of_photos"] = number_of_photos
-        print(self.user_data)
         BOT.clear_step_handler_by_chat_id(self.id)
         self.get_query(self.user_data)
 
 
-@BOT.message_handler(commands=["start", "lowprice", "highprice", "bestdeal", "history"])
+@BOT.message_handler(
+    commands=["start", "lowprice", "highprice", "bestdeal", "history", "help"]
+)
 def get_text_message(message):
     if message.text == "/start":
         logger.info(f"Пользователь {message.from_user.id} запустил бота")
@@ -513,8 +527,31 @@ def get_text_message(message):
         user.get_dates(user.id)
 
     elif message.text == "/history":
+        logger.info(
+            f"Пользователь {message.from_user.id} запустил команду {message.text}"
+        )
         user = User.get_user(message.from_user.id, message.text)
         history(user.id)
+    elif message.text == "/help":
+        logger.info(
+            f"Пользователь {message.from_user.id} запустил команду {message.text}"
+        )
+
+        string = (
+            f"_/lowprice: Подбор вариантов осуществляется с учетом стоимости._"
+            f"_Тебе будут предложены самые недорогие варианты😇_\n"
+            f"\n"
+            f"\n"
+            f"_/highrice: Подбор вариантов также осуществляется с учетом стоимости._"
+            f"_В отличие от предыдущей команды, ты увидишь только самые престижные и дорогие отели и апартаменты🤩_\n"
+            f"\n"
+            f"\n"
+            f"_/bestdeal: В этом случае ты сам(а) сможешь настроить необходимые параметры для поиска - диапазон цен и расстояние от центра🥰_"
+            f"\n"
+            f"\n"
+            f"_/history: Ты увидишь историю своих последних запросов со всеми предложениями☺_\n"
+        )
+        BOT.send_message(message.from_user.id, string, parse_mode="Markdown")
 
 
 @BOT.message_handler(content_types=["text"])
@@ -525,22 +562,9 @@ def hello(message):
 
 if __name__ == "__main__":
 
-    class CustomFilter(logging.Filter):
-        COLOR = {
-            "DEBUG": "GREEN",
-            "INFO": "GREEN",
-            "WARNING": "YELLOW",
-            "ERROR": "RED",
-            "CRITICAL": "RED",
-        }
-
-        def filter(self, record):
-            record.color = CustomFilter.COLOR[record.levelname]
-            return True
-
-
     logger = logging.getLogger(__name__)
-    logger.addFilter(CustomFilter())
+    consoleHandler = logging.StreamHandler()
+    logger.addHandler(consoleHandler)
     logging.basicConfig(
         filename="logging.log",
         level=logging.INFO,

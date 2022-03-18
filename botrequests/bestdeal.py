@@ -16,8 +16,8 @@ API_KEY = os.getenv("x-rapidapi-key")
 
 
 class QueryBestdeal(Query):
-    def __init__(self, bot):
-        super().__init__(bot)
+    def __init__(self, bot, user_id):
+        super().__init__(bot, user_id)
         self.min_price = None
         self.max_price = None
         self.miles = None
@@ -25,8 +25,8 @@ class QueryBestdeal(Query):
 
     def db_get_tuple(self):
         Database.sql.execute(
-            "SELECT city_of_destination, number_of_variants, number_of_photos, arrival, departure, "
-            "miles, min_price, max_price FROM users"
+            f"SELECT city_of_destination, number_of_variants, number_of_photos, arrival, departure, "
+            f"miles, min_price, max_price FROM users WHERE user_id = {self.user_id}"
         )
 
         tuple_of_data = Database.sql.fetchall()[-1]
@@ -47,19 +47,27 @@ class QueryBestdeal(Query):
             urls,
             url,
         ) = super().for_each_variant(variant)
-        miles = int(distance.replace(" miles", ""))
-        if miles > self.miles:
+        miles = distance.replace(" км", "")
+        km = float(miles.replace(",", "."))
+        if km > self.miles:
             return None
         return name, address, price, overall_price, distance, urls, url
 
     def get_response(self, user_data):
         self.db_insert(user_data)
+        self.logger.info("Insert запрос в базу данных завершен")
         self.db_get_tuple()
+        self.logger.info(
+            "Select запрос в базу данных завершен. Необходимые данные получены"
+        )
         querystring = {"query": self.city_of_destination, "locale": "ru"}
         response = requests.request(
             "GET", self.URL, headers=self.HEADERS, params=querystring
         )
         dict_of_response = json.loads(response.text)
+        self.logger.info(
+            f"Ответ 1 от сервера получен со статус кодом {response.status_code}"
+        )
         try:
             destination_id = dict_of_response["suggestions"][0]["entities"][1][
                 "destinationId"
@@ -85,6 +93,9 @@ class QueryBestdeal(Query):
                 params=querystring,
             )
             dict_of_response = json.loads(response.text)
+            self.logger.info(
+                f"Ответ 2 от сервера получен со статус кодом {response.status_code}"
+            )
             list_of_variants = dict_of_response["data"]["body"]["searchResults"][
                 "results"
             ]
@@ -140,9 +151,11 @@ class QueryBestdeal(Query):
                         self.bot.send_media_group(user_data["id"], photos_tg)
 
                 except Exception as e:
+                    self.logger.error(e)
                     continue
 
         except Exception as e:
+            self.logger.error(e)
             return e
         else:
-            pass
+            return 0
