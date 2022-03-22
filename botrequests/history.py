@@ -2,7 +2,11 @@ from bot_start import BOT
 from database import Database
 
 
-def history(user_id):
+def history(user_id: int) -> None:
+    """
+    Формирование истории запросов пользователя:
+        :param user_id: id пользователя
+    """
     data = Database.select_hotels(user_id)
     if data is None:
         BOT.send_message(user_id, "Похоже, ты еще не успел сделать ни одного запроса!")

@@ -1,5 +1,6 @@
 import datetime
 import logging
+from typing import Optional
 
 import requests
 import os
@@ -16,6 +17,13 @@ API_KEY = os.getenv("x-rapidapi-key")
 
 
 class Query:
+    """
+    Базовый класс для формирования и обработки запроса на основе пользовательских данных;
+    создания select и insert запросов в базу данных; формирования и обработки полученного от api ответа;
+    отсылки ответа пользователю
+    """
+
+    # urls & headers, необходимые для формирования запроса к api
     URL_COMMAND = "https://hotels4.p.rapidapi.com/properties/list"
     URL_GETPHOTOS = "https://hotels4.p.rapidapi.com/properties/get-hotel-photos"
 
@@ -30,7 +38,12 @@ class Query:
         "x-rapidapi-key": API_KEY,
     }
 
-    def __init__(self, bot, user_id):
+    def __init__(self, bot, user_id: int) -> None:
+        """
+        Конструктор класса.
+            :param user_id: id пользователя сессии
+            :param bot: сам бот
+        """
         self.logger = logging.getLogger(__name__)
         consoleHandler = logging.StreamHandler()
         self.logger.addHandler(consoleHandler)
@@ -50,14 +63,25 @@ class Query:
         self.sorting = "PRICE"
 
     @staticmethod
-    def db_insert(user_data):
+    def db_insert(user_data: dict) -> None:
+        """
+        Insert-запрос в базу данных
+            :param user_data: словарь пользовательских данных
+        """
         Database.insert(user_data)
 
     @staticmethod
-    def db_insert_hotel_data(hotel_data):
+    def db_insert_hotel_data(hotel_data: dict) -> None:
+        """
+        Select-запрос в базу данных
+            :param hotel_data: словарь данных об отеле
+        """
         Database.insert_hotels(hotel_data)
 
-    def db_get_tuple(self):
+    def db_get_tuple(self) -> None:
+        """
+        Select-запрос в базу данных. Получение кортежа с пользовательскими данными
+        """
         Database.sql.execute(
             f"SELECT city_of_destination, number_of_variants, number_of_photos, arrival, departure, "
             f"user_id "
@@ -70,7 +94,13 @@ class Query:
         self.user_id = tuple_of_data[5]
         self.arrival, self.departure = tuple_of_data[3], tuple_of_data[4]
 
-    def get_photos(self, number_of_photos, hotel_id):
+    def get_photos(self, number_of_photos: int, hotel_id: int) -> list:
+        """
+        Запрос к api для получения фотографий
+            :param number_of_photos: количество фотографий
+            :param hotel_id: id отеля
+            :return: список полученных фотографий
+        """
         querystring_getphotos = {"id": hotel_id}
         response = requests.request(
             "GET",
@@ -88,7 +118,12 @@ class Query:
             return urls[:number_of_photos]
         return urls
 
-    def for_each_variant(self, variant):
+    def for_each_variant(self, variant: dict) -> tuple:
+        """
+        Получение необходимых данных в готовом виде для формирования ответа пользователю:
+            :param variant: полученный от api вариант отеля/хостела/апартаментов
+            :return: красиво-упакованные данные для ответа пользователю
+        """
         urls = None
         if self.number_of_photos > 0:
             hotel_id = variant["id"]
@@ -105,7 +140,12 @@ class Query:
         url = f"https://ru.hotels.com/ho{variant['id']}"
         return name, address, price, overall_price, distance, urls, url
 
-    def get_response(self, user_data):
+    def get_response(self, user_data: dict) -> Optional:
+        """
+        Получение ответа от api в сыром виде (json-объект)
+            :param user_data: пользовательские данные
+            :return: либо исключение, либо 0 при успешной отработке
+        """
         self.db_insert(user_data)
         self.logger.info("Insert запрос в базу данных завершен")
         self.db_get_tuple()

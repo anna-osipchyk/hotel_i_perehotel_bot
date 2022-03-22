@@ -16,6 +16,11 @@ API_KEY = os.getenv("x-rapidapi-key")
 
 
 class QueryBestdeal(Query):
+    """
+    Класс-наследник для обработки команды bestdeal
+    Все методы реализованы по аналогии с родительским классом, только с добавлением новых данных
+    """
+
     def __init__(self, bot, user_id):
         super().__init__(bot, user_id)
         self.min_price = None

@@ -10,6 +10,8 @@ API_KEY = os.getenv("x-rapidapi-key")
 
 
 class QueryLowprice(Query):
+    """Класс-наследник для обработки команды lowprice"""
+
     def __init__(self, bot, user_id):
         super().__init__(bot, user_id)
         self.sorting = "PRICE"

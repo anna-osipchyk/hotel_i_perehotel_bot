@@ -1,6 +1,7 @@
 import datetime
 
 from telebot import types
+from telebot.types import User as t_user
 from telegram_bot_calendar import DetailedTelegramCalendar
 
 from bot_start import BOT
@@ -12,16 +13,24 @@ import logging
 
 
 class Calendar(DetailedTelegramCalendar):
+    """
+    Календарь. Объекты этого класса создаются каждый раз,
+    когда у пользователя запрашивают дату заселения/выселения
+
+    """
+
     prev_button = "👈🏻️"
     next_button = "👉🏻"
     empty_year_button = "🚫"
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
+        # конструктор запрещает пользователю запросить дату, меньшую текущей
         self.min_date = datetime.date.today()
 
 
-def check_dates(date1, date2=None):
+def check_dates(date1: datetime.date, date2=None) -> bool:
+    """ "Проверяется валидность дат: дата выселения не меньше даты заселения"""
     if date2 is not None and date1 > date2:
         return False
     elif date2 is False:
@@ -29,7 +38,18 @@ def check_dates(date1, date2=None):
     return True
 
 
-def choose_command_and_create_instance(id, command, message, photos_needed=False):
+def choose_command_and_create_instance(
+    id: int, command: str, message: str, photos_needed=False
+) -> None:
+    """
+    В зависимости от команды создаются объекты разных DialogHandler-классов
+
+          :param id: id пользователя сессии
+          :param command: команда, выбранная пользователем
+          :param message: сообщение, переданное пользователем
+          :param photos_needed: нужны ли пользователю в ответе фото
+    """
+
     dh = None
     if command == "/lowprice":
         dh = DialogHandlerLowprice(id, command)
@@ -41,34 +61,58 @@ def choose_command_and_create_instance(id, command, message, photos_needed=False
         logger.info(
             f"Создался экземпляр DialogHandler для обработки данных пользователя {id}"
         )
+        # передается управление функции get_number_of_photos
         BOT.register_next_step_handler(message, dh.get_number_of_photos)
     else:
         logger.info(
             f"Создался экземпляр DialogHandler для обработки данных пользователя {id}"
         )
+        # передается управление функции get_city
         BOT.register_next_step_handler(message, dh.get_city)
 
 
 class CommandMixin:
-    def __init__(self, command):
+    """Класс-примесь для запоминания команды, запрошенной пользователем"""
+
+    def __init__(self, command: str) -> None:
         self.command = command
 
 
 class User(CommandMixin):
+    """Класс пользователя"""
+
     users = {}
     self_like_id = None
 
-    def __init__(self, id, command):
+    def __init__(self, id: int, command: str) -> None:
+        """
+        Конструктор класса:
+            :param id: id пользователя сессии
+            :param command: команда, выбранная пользователем
+        """
         super().__init__(command)
         self.id = id
         User.add_user(id, self)
 
     @classmethod
-    def add_user(cls, id, user):
+    def add_user(cls, id: int, user: t_user) -> None:
+        """
+        Пользователь добавляется в список существующих пользователей:
+            :param id: id пользователя сессии
+            :param user: объект класса User
+        """
+
         cls.users[id] = user
 
     @classmethod
-    def get_user(cls, id, command=None):
+    def get_user(cls, id: int, command=None) -> "User":
+        """
+        Пользователь либо создается, если его нет в словаре пользователей,
+        в противном случае возвращается существующий объект:
+            :param id: id пользователя сессии
+            :param command: выбранная пользователем команда
+            :return: User
+        """
         if id in User.users:
             user = User.users[id]
             user.command = command
@@ -77,7 +121,9 @@ class User(CommandMixin):
         return User(id, command)
 
     @staticmethod
-    def get_dates(id):
+    def get_dates(id: int) -> None:
+        """Отправляет пользователю календарь:
+        :param id: id пользователя сессии"""
         logger.info(f"Пользователю {id} отправлен календарь")
         calendar = Calendar(locale="ru", calendar_id=1).build()[0]
         User.self_like_id = id
@@ -89,7 +135,11 @@ class User(CommandMixin):
         in ["yes_1", "yes_2", "yes_3", "no_1", "no_2", "no_3"]
     )
     def call(c):
+        """
+        Обработчик кнопок Да/Нет
+        """
         if c.data == "yes_1":
+            # если дата заселения верна, создается календарь для ввода даты выселения
             calendar, step = Calendar(locale="ru", calendar_id=2).build()
             BOT.send_message(
                 c.message.chat.id,
@@ -97,6 +147,7 @@ class User(CommandMixin):
                 reply_markup=calendar,
             )
         elif c.data == "no_1":
+            # если дата заселения не верна, еще раз создается календарь для ввода даты заселения
             DialogHandler.user_data.pop("arrival")
             calendar, step = Calendar(locale="ru", calendar_id=1).build()
             BOT.send_message(
@@ -104,6 +155,7 @@ class User(CommandMixin):
             )
 
         elif c.data == "yes_2":
+            # если дата выселения верна, создаются кнопки Да\Нет (нужны ли пользователю фотографии)
             keyboard = types.InlineKeyboardMarkup(row_width=2)
             yes_btn = types.InlineKeyboardButton(text="да", callback_data="yes_3")
             no_btn = types.InlineKeyboardButton(text="нет", callback_data="no_3")
@@ -113,12 +165,14 @@ class User(CommandMixin):
             )
 
         elif c.data == "no_2":
+            # если дата выселения не верна, еще раз создается календарь для ввода даты выселения
             DialogHandler.user_data.pop("arrival")
             calendar, step = Calendar(locale="ru", calendar_id=1).build()
             BOT.send_message(
                 c.message.chat.id, f"Выбери нужный год: ", reply_markup=calendar
             )
         elif c.data == "yes_3":
+            # пользователю нужны фотографии
             BOT.send_message(
                 c.message.chat.id, "Напиши, сколько фотографий тебе показать📸"
             )
@@ -126,6 +180,8 @@ class User(CommandMixin):
             choose_command_and_create_instance(id, command, c.message, True)
 
         elif c.data == "no_3":
+            # пользователю не нужны фотографии
+
             BOT.send_message(
                 c.message.chat.id,
                 f"Класс, теперь"
@@ -150,6 +206,7 @@ class User(CommandMixin):
             )
         elif result:
             DialogHandler.user_data["arrival"] = result
+            # вызывается проверка валидности дат
             is_valid = check_dates(
                 DialogHandler.user_data["arrival"],
                 DialogHandler.user_data.get("departure", None),
@@ -191,6 +248,7 @@ class User(CommandMixin):
                 reply_markup=key,
             )
         elif result:
+            # вызывается проверка валидности дат
             DialogHandler.user_data["departure"] = result
             is_valid = check_dates(
                 DialogHandler.user_data["arrival"],
@@ -224,11 +282,20 @@ class DialogHandler(User):
     user_data = {}
     bot = BOT
 
-    def __init__(self, id, command):
+    def __init__(self, id: int, command: str) -> None:
+        """
+        Конструктор класса:
+            :param id: id пользователя сессии
+            :param command: команда, выбранная пользователем
+        """
         super().__init__(id, command)
         self.response = None
 
-    def get_number_of_photos(self, message):
+    def get_number_of_photos(self, message: types.Message) -> None:
+        """
+        Запоминает количество запрошенных фотографий для пользователя с активной сессией:
+            :param message: сообщение от пользователя
+        """
         number_of_photos = message.text
         try:
             if message.content_type != "text":
@@ -262,7 +329,11 @@ class DialogHandler(User):
                 self.id, "Что-то пошло не так... Отправь команду заново😇"
             )
 
-    def get_city(self, message):
+    def get_city(self, message: types.Message) -> None:
+        """
+        Запоминает запрошенный город для пользователя с активной сессией:
+            :param message: сообщение от пользователя
+        """
         try:
             if message.content_type != "text":
                 raise ValueError
@@ -286,7 +357,11 @@ class DialogHandler(User):
                 self.id, "Что-то пошло не так... Отправь команду заново😇"
             )
 
-    def get_number_of_variants(self, message):
+    def get_number_of_variants(self, message: types.Message) -> None:
+        """
+        Запоминает количество запрошенных вариантов для пользователя с активной сессией:
+            :param message: сообщение от пользователя
+        """
         try:
             if message.content_type != "text":
                 raise ValueError
@@ -315,9 +390,16 @@ class DialogHandler(User):
             )
 
     def get_answer(self):
-        return self.user_data
+        """Абстрактный метод. См. описание в классах-наследниках"""
+        pass
 
-    def get_query(self, user_data):
+    def get_query(self, user_data: dict) -> None:
+        """
+        Создается объект Query-класса, внутри которого происходит формирование и обработка запроса на основе данных,
+        запрошенных пользователем:
+            :param user_data: словарь с полученными данными от пользователя (город, даты,
+        стоимость, тд)
+        """
         ql = None
         if self.command == "/lowprice":
             ql = QueryLowprice(BOT, self.id)
@@ -339,7 +421,10 @@ class DialogHandler(User):
 
 
 class DialogHandlerLowprice(DialogHandler):
-    def get_answer(self):
+    """Класс-наследник для обработки команды lowprice"""
+
+    def get_answer(self) -> None:
+        """Формирование словаря с данными от пользователя"""
         logger.info("Вызвана функция get_answer lowprice")
         number_of_photos = self.user_data.get("number_of_photos", 0)
         self.user_data["number_of_photos"] = number_of_photos
@@ -348,7 +433,8 @@ class DialogHandlerLowprice(DialogHandler):
 
 
 class DialogHandlerHighprice(DialogHandler):
-    def get_answer(self):
+    def get_answer(self) -> None:
+        """Формирование словаря с данными от пользователя"""
         logger.info("Вызвана функция get_answer highprice")
         number_of_photos = self.user_data.get("number_of_photos", 0)
         self.user_data["number_of_photos"] = number_of_photos
@@ -357,7 +443,11 @@ class DialogHandlerHighprice(DialogHandler):
 
 
 class DialogHandlerBestDeal(DialogHandler):
-    def get_city(self, message):
+    def get_city(self, message: types.Message) -> None:
+        """
+        Запоминает запрошенный город для пользователя с активной сессией:
+            :param message: сообщение от пользователя
+        """
         if message.content_type != "text":
             raise ValueError
         try:
@@ -384,7 +474,11 @@ class DialogHandlerBestDeal(DialogHandler):
                 self.id, "Что-то пошло не так... Отправь команду заново😇"
             )
 
-    def get_number_of_variants(self, message):
+    def get_number_of_variants(self, message: types.Message) -> None:
+        """
+        Запоминает количество запрошенных вариантов для пользователя с активной сессией:
+            :param message: сообщение от пользователя
+        """
         try:
             if message.content_type != "text":
                 raise ValueError
@@ -416,7 +510,11 @@ class DialogHandlerBestDeal(DialogHandler):
                 self.id, "Что-то пошло не так... Отправь команду заново😇"
             )
 
-    def get_min_price(self, message):
+    def get_min_price(self, message: types.Message) -> None:
+        """
+        Запоминает минимально допустимую цену для пользователя с активной сессией:
+            :param message: сообщение от пользователя
+        """
         try:
             if message.content_type != "text":
                 raise ValueError
@@ -444,7 +542,11 @@ class DialogHandlerBestDeal(DialogHandler):
                 self.id, "Что-то пошло не так... Отправь команду заново😇"
             )
 
-    def get_max_price(self, message):
+    def get_max_price(self, message: types.Message) -> None:
+        """
+        Запоминает максимально допустимую цену для пользователя с активной сессией:
+            :param message: сообщение от пользователя
+        """
         try:
             if message.content_type != "text":
                 raise ValueError
@@ -472,7 +574,11 @@ class DialogHandlerBestDeal(DialogHandler):
                 self.id, "Что-то пошло не так... Отправь команду заново😇"
             )
 
-    def get_miles(self, message):
+    def get_miles(self, message: types.Message) -> None:
+        """
+        Запоминает максимально допустимую дистанцию от центра для пользователя с активной сессией:
+            :param message: сообщение от пользователя
+        """
         try:
             if message.content_type != "text":
                 raise ValueError
@@ -497,7 +603,8 @@ class DialogHandlerBestDeal(DialogHandler):
                 self.id, "Что-то пошло не так... Отправь команду заново😇"
             )
 
-    def get_answer(self):
+    def get_answer(self) -> None:
+        """Формирование словаря с данными от пользователя"""
         logger.info("Вызвана функция get_answer bestdeal")
         number_of_photos = self.user_data.get("number_of_photos", 0)
         self.user_data["number_of_photos"] = number_of_photos
@@ -508,7 +615,11 @@ class DialogHandlerBestDeal(DialogHandler):
 @BOT.message_handler(
     commands=["start", "lowprice", "highprice", "bestdeal", "history", "help"]
 )
-def get_text_message(message):
+def get_text_message(message: types.Message) -> None:
+    """
+    Обработчик команд, отправляемых пользователем ("start", "lowprice", "highprice", "bestdeal", "history", "help"):
+        :param message: сообщение от пользователя
+    """
     if message.text == "/start":
         logger.info(f"Пользователь {message.from_user.id} запустил бота")
         BOT.send_message(
@@ -554,14 +665,8 @@ def get_text_message(message):
         BOT.send_message(message.from_user.id, string, parse_mode="Markdown")
 
 
-@BOT.message_handler(content_types=["text"])
-def hello(message):
-    if message.text in ["Привет", "/hello_world"]:
-        BOT.send_message(message.from_user.id, "И тебе привет!")
-
-
 if __name__ == "__main__":
-
+    """Запуск бота и создание объекта для логирования"""
     logger = logging.getLogger(__name__)
     consoleHandler = logging.StreamHandler()
     logger.addHandler(consoleHandler)
